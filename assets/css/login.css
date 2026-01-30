@@ -1,0 +1,42 @@
+/**
+ * OTW 2FA - Login Page CSS
+ */
+
+.otw-2fa-prompt {
+    font-size: 14px;
+    color: #50575e;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#otw_2fa_code {
+    font-size: 24px;
+    letter-spacing: 5px;
+    text-align: center;
+    padding: 10px;
+    font-family: monospace;
+}
+
+.otw-2fa-resend,
+.otw-2fa-backup {
+    text-align: center;
+    margin-top: 15px;
+}
+
+.otw-2fa-resend a,
+.otw-2fa-backup a {
+    color: #50575e;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.otw-2fa-resend a:hover,
+.otw-2fa-backup a:hover {
+    color: #135e96;
+    text-decoration: underline;
+}
+
+#otw-2fa-resend-message {
+    font-size: 13px;
+    color: #50575e;
+}
