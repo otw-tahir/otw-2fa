@@ -122,48 +122,72 @@ class User_Settings {
                 </td>
             </tr>
             
-            <?php if (!$is_enabled): ?>
+            <!-- Add More Methods Section - Always shown -->
             <tr>
-                <th scope="row"><?php _e('Choose Methods', 'otw-2fa'); ?></th>
+                <th scope="row"><?php _e('2FA Methods', 'otw-2fa'); ?></th>
                 <td>
                     <fieldset>
                         <p class="description" style="margin-bottom: 10px;">
-                            <?php _e('Select one or more 2FA methods. You can use any enabled method during login.', 'otw-2fa'); ?>
+                            <?php _e('Select methods to enable. You can use any enabled method during login.', 'otw-2fa'); ?>
                         </p>
                         <?php if ($enable_totp): ?>
                         <label>
-                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="totp" class="otw-2fa-method-checkbox">
-                            <?php _e('Google Authenticator / TOTP App', 'otw-2fa'); ?>
+                            <?php if (in_array('totp', $enabled_methods)): ?>
+                                <span style="color: green;">✓</span>
+                                <strong><?php _e('Google Authenticator / TOTP App', 'otw-2fa'); ?></strong>
+                                <span class="description">(<?php _e('Enabled', 'otw-2fa'); ?>)</span>
+                            <?php else: ?>
+                                <input type="checkbox" name="otw_2fa_setup_methods[]" value="totp" class="otw-2fa-method-checkbox">
+                                <?php _e('Google Authenticator / TOTP App', 'otw-2fa'); ?>
+                            <?php endif; ?>
                         </label><br>
                         <?php endif; ?>
                         
                         <?php if ($enable_email): ?>
                         <label>
-                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="email" class="otw-2fa-method-checkbox">
-                            <?php _e('Email Verification Code', 'otw-2fa'); ?>
-                            <span class="description">(<?php echo esc_html(Email_OTP::mask_email($user->user_email)); ?>)</span>
+                            <?php if (in_array('email', $enabled_methods)): ?>
+                                <span style="color: green;">✓</span>
+                                <strong><?php _e('Email Verification Code', 'otw-2fa'); ?></strong>
+                                <span class="description">(<?php _e('Enabled', 'otw-2fa'); ?>)</span>
+                            <?php else: ?>
+                                <input type="checkbox" name="otw_2fa_setup_methods[]" value="email" class="otw-2fa-method-checkbox">
+                                <?php _e('Email Verification Code', 'otw-2fa'); ?>
+                                <span class="description">(<?php echo esc_html(Email_OTP::mask_email($user->user_email)); ?>)</span>
+                            <?php endif; ?>
                         </label><br>
                         <?php endif; ?>
                         
                         <?php if ($enable_sms): ?>
                         <label>
-                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="sms" class="otw-2fa-method-checkbox">
-                            <?php _e('SMS Verification Code', 'otw-2fa'); ?>
+                            <?php if (in_array('sms', $enabled_methods)): ?>
+                                <span style="color: green;">✓</span>
+                                <strong><?php _e('SMS Verification Code', 'otw-2fa'); ?></strong>
+                                <span class="description">(<?php _e('Enabled', 'otw-2fa'); ?>)</span>
+                            <?php else: ?>
+                                <input type="checkbox" name="otw_2fa_setup_methods[]" value="sms" class="otw-2fa-method-checkbox">
+                                <?php _e('SMS Verification Code', 'otw-2fa'); ?>
+                            <?php endif; ?>
                         </label><br>
                         <?php endif; ?>
                         
                         <?php if ($enable_whatsapp): ?>
                         <label>
-                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="whatsapp" class="otw-2fa-method-checkbox">
-                            <?php _e('WhatsApp Verification Code', 'otw-2fa'); ?>
+                            <?php if (in_array('whatsapp', $enabled_methods)): ?>
+                                <span style="color: green;">✓</span>
+                                <strong><?php _e('WhatsApp Verification Code', 'otw-2fa'); ?></strong>
+                                <span class="description">(<?php _e('Enabled', 'otw-2fa'); ?>)</span>
+                            <?php else: ?>
+                                <input type="checkbox" name="otw_2fa_setup_methods[]" value="whatsapp" class="otw-2fa-method-checkbox">
+                                <?php _e('WhatsApp Verification Code', 'otw-2fa'); ?>
+                            <?php endif; ?>
                         </label>
                         <?php endif; ?>
                     </fieldset>
                 </td>
             </tr>
             
-            <!-- TOTP Setup Section -->
-            <?php if ($enable_totp): ?>
+            <!-- TOTP Setup Section - Only show if not already enabled -->
+            <?php if ($enable_totp && !in_array('totp', $enabled_methods)): ?>
             <tr class="otw-2fa-setup-section otw-2fa-setup-totp">
                 <th scope="row"><?php _e('Setup Authenticator', 'otw-2fa'); ?></th>
                 <td>
@@ -193,8 +217,8 @@ class User_Settings {
             </tr>
             <?php endif; ?>
             
-            <!-- Email Setup Section -->
-            <?php if ($enable_email): ?>
+            <!-- Email Setup Section - Only show if not already enabled -->
+            <?php if ($enable_email && !in_array('email', $enabled_methods)): ?>
             <tr class="otw-2fa-setup-section otw-2fa-setup-email" style="display: none;">
                 <th scope="row"><?php _e('Setup Email 2FA', 'otw-2fa'); ?></th>
                 <td>
@@ -223,8 +247,8 @@ class User_Settings {
             </tr>
             <?php endif; ?>
             
-            <!-- SMS Setup Section -->
-            <?php if ($enable_sms): ?>
+            <!-- SMS Setup Section - Only show if not already enabled -->
+            <?php if ($enable_sms && !in_array('sms', $enabled_methods)): ?>
             <tr class="otw-2fa-setup-section otw-2fa-setup-sms" style="display: none;">
                 <th scope="row"><?php _e('Setup SMS 2FA', 'otw-2fa'); ?></th>
                 <td>
@@ -254,8 +278,8 @@ class User_Settings {
             </tr>
             <?php endif; ?>
             
-            <!-- WhatsApp Setup Section -->
-            <?php if ($enable_whatsapp): ?>
+            <!-- WhatsApp Setup Section - Only show if not already enabled -->
+            <?php if ($enable_whatsapp && !in_array('whatsapp', $enabled_methods)): ?>
             <tr class="otw-2fa-setup-section otw-2fa-setup-whatsapp" style="display: none;">
                 <th scope="row"><?php _e('Setup WhatsApp 2FA', 'otw-2fa'); ?></th>
                 <td>
@@ -285,9 +309,7 @@ class User_Settings {
             </tr>
             <?php endif; ?>
             
-            <?php endif; // End !$is_enabled ?>
-            
-            <!-- Backup Codes -->
+            <!-- Backup Codes - Show if any method is enabled -->
             <?php if ($is_enabled): ?>
             <tr>
                 <th scope="row"><?php _e('Backup Codes', 'otw-2fa'); ?></th>
