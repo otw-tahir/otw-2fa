@@ -89,8 +89,8 @@ class User_Settings {
             return;
         }
         
-        $current_method = get_user_meta($user->ID, 'otw_2fa_method', true);
-        $is_enabled = !empty($current_method) && $current_method !== 'none';
+        $enabled_methods = self::get_methods($user->ID);
+        $is_enabled = !empty($enabled_methods);
         $totp_secret = get_user_meta($user->ID, 'otw_2fa_totp_secret', true);
         $phone = get_user_meta($user->ID, 'otw_2fa_phone', true);
         $whatsapp = get_user_meta($user->ID, 'otw_2fa_whatsapp', true);
@@ -109,7 +109,7 @@ class User_Settings {
                     <?php if ($is_enabled): ?>
                         <span class="otw-2fa-status otw-2fa-status-enabled">
                             <?php _e('Enabled', 'otw-2fa'); ?>
-                            (<?php echo esc_html($this->get_method_label($current_method)); ?>)
+                            (<?php echo esc_html($this->get_methods_label($enabled_methods)); ?>)
                         </span>
                         <button type="button" class="button button-secondary otw-2fa-disable-btn" data-user-id="<?php echo esc_attr($user->ID); ?>">
                             <?php _e('Disable 2FA', 'otw-2fa'); ?>
@@ -124,19 +124,22 @@ class User_Settings {
             
             <?php if (!$is_enabled): ?>
             <tr>
-                <th scope="row"><?php _e('Choose Method', 'otw-2fa'); ?></th>
+                <th scope="row"><?php _e('Choose Methods', 'otw-2fa'); ?></th>
                 <td>
                     <fieldset>
+                        <p class="description" style="margin-bottom: 10px;">
+                            <?php _e('Select one or more 2FA methods. You can use any enabled method during login.', 'otw-2fa'); ?>
+                        </p>
                         <?php if ($enable_totp): ?>
                         <label>
-                            <input type="radio" name="otw_2fa_setup_method" value="totp" checked>
+                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="totp" class="otw-2fa-method-checkbox">
                             <?php _e('Google Authenticator / TOTP App', 'otw-2fa'); ?>
                         </label><br>
                         <?php endif; ?>
                         
                         <?php if ($enable_email): ?>
                         <label>
-                            <input type="radio" name="otw_2fa_setup_method" value="email" <?php echo !$enable_totp ? 'checked' : ''; ?>>
+                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="email" class="otw-2fa-method-checkbox">
                             <?php _e('Email Verification Code', 'otw-2fa'); ?>
                             <span class="description">(<?php echo esc_html(Email_OTP::mask_email($user->user_email)); ?>)</span>
                         </label><br>
@@ -144,14 +147,14 @@ class User_Settings {
                         
                         <?php if ($enable_sms): ?>
                         <label>
-                            <input type="radio" name="otw_2fa_setup_method" value="sms" <?php echo (!$enable_totp && !$enable_email) ? 'checked' : ''; ?>>
+                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="sms" class="otw-2fa-method-checkbox">
                             <?php _e('SMS Verification Code', 'otw-2fa'); ?>
                         </label><br>
                         <?php endif; ?>
                         
                         <?php if ($enable_whatsapp): ?>
                         <label>
-                            <input type="radio" name="otw_2fa_setup_method" value="whatsapp" <?php echo (!$enable_totp && !$enable_email && !$enable_sms) ? 'checked' : ''; ?>>
+                            <input type="checkbox" name="otw_2fa_setup_methods[]" value="whatsapp" class="otw-2fa-method-checkbox">
                             <?php _e('WhatsApp Verification Code', 'otw-2fa'); ?>
                         </label>
                         <?php endif; ?>
@@ -324,6 +327,22 @@ class User_Settings {
     }
     
     /**
+     * Get human-readable labels for multiple methods
+     */
+    private function get_methods_label($methods) {
+        if (!is_array($methods)) {
+            return $this->get_method_label($methods);
+        }
+        
+        $labels = [];
+        foreach ($methods as $method) {
+            $labels[] = $this->get_method_label($method);
+        }
+        
+        return implode(', ', $labels);
+    }
+    
+    /**
      * Save user settings
      */
     public function save_user_settings($user_id) {
@@ -406,14 +425,22 @@ class User_Settings {
         }
         
         if ($verified) {
-            update_user_meta($user_id, 'otw_2fa_method', $method);
+            // Add this method to user's enabled methods
+            $enabled_methods = self::add_method($user_id, $method);
             
-            // Generate backup codes
-            $backup_codes = $this->generate_backup_codes($user_id);
+            // Generate backup codes if this is the first method
+            $backup_codes = null;
+            if (count($enabled_methods) === 1) {
+                $backup_codes = $this->generate_backup_codes($user_id);
+            }
             
             wp_send_json_success([
-                'message' => __('2FA has been enabled!', 'otw-2fa'),
+                'message' => sprintf(
+                    __('%s has been enabled! You can now add more methods or reload to see your settings.', 'otw-2fa'),
+                    $this->get_method_label($method)
+                ),
                 'backup_codes' => $backup_codes,
+                'enabled_methods' => $enabled_methods,
             ]);
         } else {
             wp_send_json_error(['message' => __('Invalid verification code.', 'otw-2fa')]);
@@ -513,6 +540,7 @@ class User_Settings {
         
         // Remove 2FA settings
         delete_user_meta($user_id, 'otw_2fa_method');
+        delete_user_meta($user_id, 'otw_2fa_methods');
         delete_user_meta($user_id, 'otw_2fa_totp_secret');
         delete_user_meta($user_id, 'otw_2fa_backup_codes');
         
@@ -544,14 +572,83 @@ class User_Settings {
      * Check if 2FA is enabled for user
      */
     public static function is_enabled($user_id) {
-        $method = get_user_meta($user_id, 'otw_2fa_method', true);
-        return !empty($method) && $method !== 'none';
+        $methods = self::get_methods($user_id);
+        return !empty($methods);
     }
     
     /**
-     * Get user's 2FA method
+     * Get user's 2FA method (returns first method for backward compatibility)
+     * @deprecated Use get_methods() instead
      */
     public static function get_method($user_id) {
-        return get_user_meta($user_id, 'otw_2fa_method', true);
+        $methods = self::get_methods($user_id);
+        return !empty($methods) ? $methods[0] : '';
+    }
+    
+    /**
+     * Get user's enabled 2FA methods (array)
+     */
+    public static function get_methods($user_id) {
+        $methods = get_user_meta($user_id, 'otw_2fa_methods', true);
+        
+        // Backward compatibility: check old single method field
+        if (empty($methods)) {
+            $old_method = get_user_meta($user_id, 'otw_2fa_method', true);
+            if (!empty($old_method) && $old_method !== 'none') {
+                return [$old_method];
+            }
+            return [];
+        }
+        
+        return is_array($methods) ? $methods : [$methods];
+    }
+    
+    /**
+     * Check if user has a specific method enabled
+     */
+    public static function has_method($user_id, $method) {
+        $methods = self::get_methods($user_id);
+        return in_array($method, $methods);
+    }
+    
+    /**
+     * Add a method to user's enabled methods
+     */
+    public static function add_method($user_id, $method) {
+        $methods = self::get_methods($user_id);
+        
+        if (!in_array($method, $methods)) {
+            $methods[] = $method;
+            update_user_meta($user_id, 'otw_2fa_methods', $methods);
+            
+            // Also update old field for backward compatibility
+            if (count($methods) === 1) {
+                update_user_meta($user_id, 'otw_2fa_method', $method);
+            }
+        }
+        
+        return $methods;
+    }
+    
+    /**
+     * Remove a method from user's enabled methods
+     */
+    public static function remove_method($user_id, $method) {
+        $methods = self::get_methods($user_id);
+        $methods = array_filter($methods, function($m) use ($method) {
+            return $m !== $method;
+        });
+        $methods = array_values($methods);
+        
+        update_user_meta($user_id, 'otw_2fa_methods', $methods);
+        
+        // Update old field
+        if (empty($methods)) {
+            delete_user_meta($user_id, 'otw_2fa_method');
+        } else {
+            update_user_meta($user_id, 'otw_2fa_method', $methods[0]);
+        }
+        
+        return $methods;
     }
 }

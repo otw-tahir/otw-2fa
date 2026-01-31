@@ -6,7 +6,7 @@
     'use strict';
 
     // State
-    var currentMethod = 'totp';
+    var selectedMethods = [];
 
     /**
      * Initialize
@@ -20,9 +20,9 @@
      * Bind events
      */
     function bindEvents() {
-        // Method selection
-        $('input[name="otw_2fa_setup_method"]').on('change', function() {
-            currentMethod = $(this).val();
+        // Method selection (checkboxes for multiple methods)
+        $('.otw-2fa-method-checkbox').on('change', function() {
+            updateSelectedMethods();
             toggleSetupSections();
         });
 
@@ -72,13 +72,27 @@
             }
         });
     }
+    
+    /**
+     * Update selected methods from checkboxes
+     */
+    function updateSelectedMethods() {
+        selectedMethods = [];
+        $('.otw-2fa-method-checkbox:checked').each(function() {
+            selectedMethods.push($(this).val());
+        });
+    }
 
     /**
-     * Toggle setup sections based on selected method
+     * Toggle setup sections based on selected methods
      */
     function toggleSetupSections() {
         $('.otw-2fa-setup-section').hide();
-        $('.otw-2fa-setup-' + currentMethod).show();
+        
+        // Show setup sections for all selected methods
+        selectedMethods.forEach(function(method) {
+            $('.otw-2fa-setup-' + method).show();
+        });
     }
 
     /**
@@ -253,17 +267,33 @@
             },
             success: function(response) {
                 if (response.success) {
-                    showMessage($btn, otw2fa.strings.verified, 'success');
+                    showMessage($btn, response.data.message || otw2fa.strings.verified, 'success');
                     
-                    // Show backup codes if provided
+                    // Mark this method as enabled
+                    $('input.otw-2fa-method-checkbox[value="' + method + '"]')
+                        .prop('disabled', true)
+                        .parent()
+                        .append(' <span class="otw-2fa-enabled-badge" style="color: green; font-weight: bold;">✓ Enabled</span>');
+                    
+                    // Hide this method's setup section
+                    $('.otw-2fa-setup-' + method).hide();
+                    
+                    // Show backup codes if provided (first method enabled)
                     if (response.data.backup_codes) {
                         showBackupCodes(response.data.backup_codes);
                     }
                     
-                    // Reload page after delay
-                    setTimeout(function() {
-                        location.reload();
-                    }, 3000);
+                    // Check if there are more methods to enable
+                    var remainingMethods = selectedMethods.filter(function(m) {
+                        return !$('input.otw-2fa-method-checkbox[value="' + m + '"]').prop('disabled');
+                    });
+                    
+                    // If no more methods to set up, reload after delay
+                    if (remainingMethods.length === 0) {
+                        setTimeout(function() {
+                            location.reload();
+                        }, 3000);
+                    }
                 } else {
                     showMessage($btn, response.data.message, 'error');
                     $input.val('').focus();

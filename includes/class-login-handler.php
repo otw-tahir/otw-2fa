@@ -71,15 +71,17 @@ class Login_Handler {
             'created' => time(),
         ], 300); // 5 minutes
         
-        // Get user's 2FA method
-        $method = User_Settings::get_method($user->ID);
+        // Get user's enabled 2FA methods
+        $methods = User_Settings::get_methods($user->ID);
         
-        // For email/SMS/WhatsApp, send the code now
-        if ($method === 'email') {
+        // For OTP-based methods, send the codes now
+        if (in_array('email', $methods)) {
             Email_OTP::send_code($user->ID);
-        } elseif ($method === 'sms') {
+        }
+        if (in_array('sms', $methods)) {
             SMS_OTP::send_code($user->ID);
-        } elseif ($method === 'whatsapp') {
+        }
+        if (in_array('whatsapp', $methods)) {
             WhatsApp_OTP::send_code($user->ID);
         }
         
@@ -139,7 +141,7 @@ class Login_Handler {
             return;
         }
         
-        $method = User_Settings::get_method($user->ID);
+        $methods = User_Settings::get_methods($user->ID);
         $error = '';
         $remaining_attempts = Security::get_remaining_attempts($user->ID);
         
@@ -148,24 +150,38 @@ class Login_Handler {
             $code = sanitize_text_field($_POST['otw_2fa_code']);
             $verified = false;
             
-            // Try verification code first
-            switch ($method) {
-                case 'totp':
-                    $secret = get_user_meta($user->ID, 'otw_2fa_totp_secret', true);
-                    $verified = TOTP::verify_code($secret, $code);
-                    break;
-                    
-                case 'email':
-                    $verified = Email_OTP::verify_code($user->ID, $code);
-                    break;
-                    
-                case 'sms':
-                    $verified = SMS_OTP::verify_code($user->ID, $code);
-                    break;
-                    
-                case 'whatsapp':
-                    $verified = WhatsApp_OTP::verify_code($user->ID, $code);
-                    break;
+            // Try verification against all enabled methods
+            foreach ($methods as $method) {
+                switch ($method) {
+                    case 'totp':
+                        $secret = get_user_meta($user->ID, 'otw_2fa_totp_secret', true);
+                        if (TOTP::verify_code($secret, $code)) {
+                            $verified = true;
+                            break 2; // Exit both switch and foreach
+                        }
+                        break;
+                        
+                    case 'email':
+                        if (Email_OTP::verify_code($user->ID, $code)) {
+                            $verified = true;
+                            break 2;
+                        }
+                        break;
+                        
+                    case 'sms':
+                        if (SMS_OTP::verify_code($user->ID, $code)) {
+                            $verified = true;
+                            break 2;
+                        }
+                        break;
+                        
+                    case 'whatsapp':
+                        if (WhatsApp_OTP::verify_code($user->ID, $code)) {
+                            $verified = true;
+                            break 2;
+                        }
+                        break;
+                }
             }
             
             // If not verified, try backup code
@@ -204,20 +220,44 @@ class Login_Handler {
         }
         
         // Show 2FA verification form
-        $this->render_verification_form($user, $method, $token, $error, $remaining_attempts);
+        $this->render_verification_form($user, $methods, $token, $error, $remaining_attempts);
         exit;
     }
     
     /**
      * Render 2FA verification form
      */
-    private function render_verification_form($user, $method, $token, $error = '', $remaining_attempts = null) {
+    private function render_verification_form($user, $methods, $token, $error = '', $remaining_attempts = null) {
+        // Ensure methods is an array
+        if (!is_array($methods)) {
+            $methods = [$methods];
+        }
+        
         $method_labels = [
-            'totp' => __('Enter the code from your authenticator app', 'otw-2fa'),
-            'email' => sprintf(__('Enter the code sent to %s', 'otw-2fa'), Email_OTP::mask_email($user->user_email)),
-            'sms' => sprintf(__('Enter the code sent to %s', 'otw-2fa'), SMS_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_phone', true))),
-            'whatsapp' => sprintf(__('Enter the code sent to your WhatsApp (%s)', 'otw-2fa'), WhatsApp_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_whatsapp', true))),
+            'totp' => __('authenticator app', 'otw-2fa'),
+            'email' => sprintf(__('email (%s)', 'otw-2fa'), Email_OTP::mask_email($user->user_email)),
+            'sms' => sprintf(__('SMS (%s)', 'otw-2fa'), SMS_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_phone', true))),
+            'whatsapp' => sprintf(__('WhatsApp (%s)', 'otw-2fa'), WhatsApp_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_whatsapp', true))),
         ];
+        
+        // Build the prompt text based on enabled methods
+        $method_descriptions = [];
+        foreach ($methods as $method) {
+            if (isset($method_labels[$method])) {
+                $method_descriptions[] = $method_labels[$method];
+            }
+        }
+        
+        if (count($method_descriptions) === 1) {
+            $prompt = sprintf(__('Enter the code from your %s', 'otw-2fa'), $method_descriptions[0]);
+        } else {
+            $last = array_pop($method_descriptions);
+            $prompt = sprintf(
+                __('Enter the code from your %s or %s', 'otw-2fa'),
+                implode(', ', $method_descriptions),
+                $last
+            );
+        }
         
         login_header(__('Two-Factor Authentication', 'otw-2fa'));
         ?>
@@ -230,7 +270,7 @@ class Login_Handler {
             <?php endif; ?>
             
             <p class="otw-2fa-prompt">
-                <?php echo esc_html($method_labels[$method] ?? __('Enter your verification code', 'otw-2fa')); ?>
+                <?php echo esc_html($prompt); ?>
             </p>
             
             <p>
@@ -238,7 +278,7 @@ class Login_Handler {
                 <input type="text" name="otw_2fa_code" id="otw_2fa_code" class="input" 
                        size="20" autocomplete="off" autofocus 
                        pattern="[0-9A-Za-z]*" maxlength="10"
-                       placeholder="<?php echo $method === 'totp' ? '123456' : '123456'; ?>">
+                       placeholder="123456">
             </p>
             
             <p class="submit">
@@ -247,9 +287,13 @@ class Login_Handler {
                        value="<?php esc_attr_e('Verify', 'otw-2fa'); ?>">
             </p>
             
-            <?php if (in_array($method, ['email', 'sms'])): ?>
+            <?php 
+            // Show resend link if any OTP method is enabled
+            $has_otp_method = array_intersect($methods, ['email', 'sms', 'whatsapp']);
+            if (!empty($has_otp_method)): 
+            ?>
             <p class="otw-2fa-resend">
-                <a href="#" id="otw-2fa-resend-link" data-token="<?php echo esc_attr($token); ?>" data-method="<?php echo esc_attr($method); ?>">
+                <a href="#" id="otw-2fa-resend-link" data-token="<?php echo esc_attr($token); ?>" data-methods="<?php echo esc_attr(implode(',', $methods)); ?>">
                     <?php _e("Didn't receive a code? Resend", 'otw-2fa'); ?>
                 </a>
                 <span id="otw-2fa-resend-message" style="display: none;"></span>
@@ -363,25 +407,44 @@ class Login_Handler {
         }
         
         $user_id = $pending['user_id'];
-        $method = User_Settings::get_method($user_id);
+        $methods = User_Settings::get_methods($user_id);
         
-        $sent = false;
+        $sent_methods = [];
+        $errors = [];
         
-        if ($method === 'email') {
-            $sent = Email_OTP::send_code($user_id);
-        } elseif ($method === 'sms') {
-            $result = SMS_OTP::send_code($user_id);
-            $sent = $result === true;
-            
-            if (is_wp_error($result)) {
-                wp_send_json_error(['message' => $result->get_error_message()]);
+        // Resend codes for all OTP methods
+        if (in_array('email', $methods)) {
+            if (Email_OTP::send_code($user_id)) {
+                $sent_methods[] = 'email';
             }
         }
         
-        if ($sent) {
-            wp_send_json_success(['message' => __('Code sent!', 'otw-2fa')]);
+        if (in_array('sms', $methods)) {
+            $result = SMS_OTP::send_code($user_id);
+            if ($result === true) {
+                $sent_methods[] = 'SMS';
+            } elseif (is_wp_error($result)) {
+                $errors[] = $result->get_error_message();
+            }
+        }
+        
+        if (in_array('whatsapp', $methods)) {
+            $result = WhatsApp_OTP::send_code($user_id);
+            if ($result === true) {
+                $sent_methods[] = 'WhatsApp';
+            } elseif (is_wp_error($result)) {
+                $errors[] = $result->get_error_message();
+            }
+        }
+        
+        if (!empty($sent_methods)) {
+            wp_send_json_success([
+                'message' => sprintf(__('Code sent via %s!', 'otw-2fa'), implode(', ', $sent_methods))
+            ]);
+        } elseif (!empty($errors)) {
+            wp_send_json_error(['message' => implode(' ', $errors)]);
         } else {
-            wp_send_json_error(['message' => __('Failed to send code.', 'otw-2fa')]);
+            wp_send_json_error(['message' => __('No OTP methods available to resend.', 'otw-2fa')]);
         }
     }
 }
