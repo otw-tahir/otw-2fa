@@ -379,7 +379,7 @@ class Login_Handler {
         }
         
         foreach ($backup_codes as $index => $hashed_code) {
-            if (wp_check_password($code, $hashed_code)) {
+            if (hash_equals($hashed_code, hash('sha256', $code))) {
                 // Remove used backup code
                 unset($backup_codes[$index]);
                 update_user_meta($user_id, 'otw_2fa_backup_codes', array_values($backup_codes));

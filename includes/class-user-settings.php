@@ -560,7 +560,7 @@ class User_Settings {
         
         // Store hashed codes
         $hashed_codes = array_map(function($code) {
-            return wp_hash($code);
+            return hash('sha256', $code);
         }, $codes);
         
         update_user_meta($user_id, 'otw_2fa_backup_codes', $hashed_codes);

@@ -39,7 +39,7 @@ class WhatsApp_OTP {
         // Store code with expiry
         $expiry = get_option('otw_2fa_code_expiry', 300);
         set_transient('otw_2fa_whatsapp_code_' . $user_id, [
-            'code' => wp_hash($code),
+            'code' => hash('sha256', $code),
             'created' => time(),
         ], $expiry);
         
@@ -231,7 +231,7 @@ class WhatsApp_OTP {
         }
         
         // Check if code matches
-        if (wp_check_password($code, $stored['code'])) {
+        if (hash_equals($stored['code'], hash('sha256', $code))) {
             // Delete the code after successful verification
             delete_transient('otw_2fa_whatsapp_code_' . $user_id);
             return true;

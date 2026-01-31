@@ -30,10 +30,10 @@ class Email_OTP {
         $code_length = get_option('otw_2fa_code_length', 6);
         $code = self::generate_code($code_length);
         
-        // Store code with expiry
+        // Store code with expiry (hash it for security)
         $expiry = get_option('otw_2fa_code_expiry', 300);
         set_transient('otw_2fa_email_code_' . $user_id, [
-            'code' => wp_hash($code),
+            'code' => hash('sha256', $code),
             'created' => time(),
         ], $expiry);
         
@@ -78,8 +78,8 @@ class Email_OTP {
             return false;
         }
         
-        // Check if code matches
-        if (wp_check_password($code, $stored['code'])) {
+        // Check if code matches using same hash method
+        if (hash_equals($stored['code'], hash('sha256', $code))) {
             // Delete the code after successful verification
             delete_transient('otw_2fa_email_code_' . $user_id);
             return true;
