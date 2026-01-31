@@ -30,6 +30,7 @@ class User_Settings {
         add_action('wp_ajax_otw_2fa_verify_setup', [$this, 'ajax_verify_setup']);
         add_action('wp_ajax_otw_2fa_send_test_email', [$this, 'ajax_send_test_email']);
         add_action('wp_ajax_otw_2fa_send_test_sms', [$this, 'ajax_send_test_sms']);
+        add_action('wp_ajax_otw_2fa_send_test_whatsapp', [$this, 'ajax_send_test_whatsapp']);
         add_action('wp_ajax_otw_2fa_disable', [$this, 'ajax_disable_2fa']);
         
         // Enqueue scripts
@@ -70,6 +71,7 @@ class User_Settings {
                 'error' => __('An error occurred.', 'otw-2fa'),
                 'codeSent' => __('Code sent! Check your inbox.', 'otw-2fa'),
                 'smsSent' => __('SMS sent! Check your phone.', 'otw-2fa'),
+                'whatsappSent' => __('WhatsApp message sent! Check your phone.', 'otw-2fa'),
                 'verified' => __('2FA has been enabled!', 'otw-2fa'),
                 'disabled' => __('2FA has been disabled.', 'otw-2fa'),
                 'invalidCode' => __('Invalid verification code.', 'otw-2fa'),
@@ -91,10 +93,12 @@ class User_Settings {
         $is_enabled = !empty($current_method) && $current_method !== 'none';
         $totp_secret = get_user_meta($user->ID, 'otw_2fa_totp_secret', true);
         $phone = get_user_meta($user->ID, 'otw_2fa_phone', true);
+        $whatsapp = get_user_meta($user->ID, 'otw_2fa_whatsapp', true);
         
         $enable_totp = get_option('otw_2fa_enable_totp', 1);
         $enable_email = get_option('otw_2fa_enable_email', 1);
         $enable_sms = get_option('otw_2fa_enable_sms', 0);
+        $enable_whatsapp = get_option('otw_2fa_enable_whatsapp', 0);
         
         ?>
         <h2><?php _e('Two-Factor Authentication', 'otw-2fa'); ?></h2>
@@ -142,6 +146,13 @@ class User_Settings {
                         <label>
                             <input type="radio" name="otw_2fa_setup_method" value="sms" <?php echo (!$enable_totp && !$enable_email) ? 'checked' : ''; ?>>
                             <?php _e('SMS Verification Code', 'otw-2fa'); ?>
+                        </label><br>
+                        <?php endif; ?>
+                        
+                        <?php if ($enable_whatsapp): ?>
+                        <label>
+                            <input type="radio" name="otw_2fa_setup_method" value="whatsapp" <?php echo (!$enable_totp && !$enable_email && !$enable_sms) ? 'checked' : ''; ?>>
+                            <?php _e('WhatsApp Verification Code', 'otw-2fa'); ?>
                         </label>
                         <?php endif; ?>
                     </fieldset>
@@ -240,6 +251,37 @@ class User_Settings {
             </tr>
             <?php endif; ?>
             
+            <!-- WhatsApp Setup Section -->
+            <?php if ($enable_whatsapp): ?>
+            <tr class="otw-2fa-setup-section otw-2fa-setup-whatsapp" style="display: none;">
+                <th scope="row"><?php _e('Setup WhatsApp 2FA', 'otw-2fa'); ?></th>
+                <td>
+                    <div class="otw-2fa-whatsapp-setup">
+                        <p>
+                            <label for="otw-2fa-whatsapp"><?php _e('WhatsApp Number:', 'otw-2fa'); ?></label><br>
+                            <input type="tel" id="otw-2fa-whatsapp" name="otw_2fa_whatsapp" class="regular-text" 
+                                   value="<?php echo esc_attr($whatsapp); ?>" 
+                                   placeholder="+1234567890">
+                            <p class="description"><?php _e('Include country code (e.g., +1 for US)', 'otw-2fa'); ?></p>
+                        </p>
+                        
+                        <button type="button" class="button button-primary" id="otw-2fa-send-test-whatsapp">
+                            <?php _e('Send Test Code', 'otw-2fa'); ?>
+                        </button>
+                        
+                        <div class="otw-2fa-whatsapp-verify" style="display: none;">
+                            <p><?php _e('Enter the code from your WhatsApp:', 'otw-2fa'); ?></p>
+                            <input type="text" id="otw-2fa-whatsapp-code" class="regular-text" placeholder="123456" maxlength="6" autocomplete="off">
+                            <button type="button" class="button" id="otw-2fa-verify-whatsapp">
+                                <?php _e('Verify & Enable', 'otw-2fa'); ?>
+                            </button>
+                            <span class="otw-2fa-message"></span>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            <?php endif; ?>
+            
             <?php endif; // End !$is_enabled ?>
             
             <!-- Backup Codes -->
@@ -275,6 +317,7 @@ class User_Settings {
             'totp' => __('Google Authenticator', 'otw-2fa'),
             'email' => __('Email', 'otw-2fa'),
             'sms' => __('SMS', 'otw-2fa'),
+            'whatsapp' => __('WhatsApp', 'otw-2fa'),
         ];
         
         return $labels[$method] ?? $method;
@@ -356,6 +399,10 @@ class User_Settings {
             case 'sms':
                 $verified = SMS_OTP::verify_code($user_id, $code);
                 break;
+                
+            case 'whatsapp':
+                $verified = WhatsApp_OTP::verify_code($user_id, $code);
+                break;
         }
         
         if ($verified) {
@@ -417,6 +464,37 @@ class User_Settings {
             wp_send_json_error(['message' => $result->get_error_message()]);
         } else {
             wp_send_json_error(['message' => __('Failed to send SMS.', 'otw-2fa')]);
+        }
+    }
+    
+    /**
+     * AJAX: Send test WhatsApp code
+     */
+    public function ajax_send_test_whatsapp() {
+        check_ajax_referer('otw_2fa_nonce', 'nonce');
+        
+        $user_id = get_current_user_id();
+        $whatsapp = sanitize_text_field($_POST['whatsapp'] ?? '');
+        
+        if (empty($whatsapp)) {
+            wp_send_json_error(['message' => __('Please enter a WhatsApp number.', 'otw-2fa')]);
+        }
+        
+        if (!WhatsApp_OTP::validate_phone($whatsapp)) {
+            wp_send_json_error(['message' => __('Invalid WhatsApp number format.', 'otw-2fa')]);
+        }
+        
+        // Save WhatsApp number
+        update_user_meta($user_id, 'otw_2fa_whatsapp', $whatsapp);
+        
+        $result = WhatsApp_OTP::send_code($user_id);
+        
+        if ($result === true) {
+            wp_send_json_success(['message' => __('Verification code sent!', 'otw-2fa')]);
+        } elseif (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        } else {
+            wp_send_json_error(['message' => __('Failed to send WhatsApp message.', 'otw-2fa')]);
         }
     }
     

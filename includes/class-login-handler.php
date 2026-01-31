@@ -74,11 +74,13 @@ class Login_Handler {
         // Get user's 2FA method
         $method = User_Settings::get_method($user->ID);
         
-        // For email/SMS, send the code now
+        // For email/SMS/WhatsApp, send the code now
         if ($method === 'email') {
             Email_OTP::send_code($user->ID);
         } elseif ($method === 'sms') {
             SMS_OTP::send_code($user->ID);
+        } elseif ($method === 'whatsapp') {
+            WhatsApp_OTP::send_code($user->ID);
         }
         
         // Redirect to 2FA verification page
@@ -102,6 +104,16 @@ class Login_Handler {
             exit;
         }
         
+        // Check if IP is blocked
+        $ip_blocked = Security::is_ip_blocked();
+        if ($ip_blocked !== false) {
+            $this->show_error(sprintf(
+                __('Too many failed attempts. Please try again in %s.', 'otw-2fa'),
+                Security::format_block_time($ip_blocked)
+            ));
+            return;
+        }
+        
         $pending = get_transient('otw_2fa_pending_login_' . $token);
         
         if (!$pending) {
@@ -117,8 +129,19 @@ class Login_Handler {
             exit;
         }
         
+        // Check if user is blocked
+        $user_blocked = Security::is_user_blocked($user->ID);
+        if ($user_blocked !== false) {
+            $this->show_error(sprintf(
+                __('Too many failed attempts. Please try again in %s.', 'otw-2fa'),
+                Security::format_block_time($user_blocked)
+            ));
+            return;
+        }
+        
         $method = User_Settings::get_method($user->ID);
         $error = '';
+        $remaining_attempts = Security::get_remaining_attempts($user->ID);
         
         // Handle form submission
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['otw_2fa_code'])) {
@@ -139,6 +162,10 @@ class Login_Handler {
                 case 'sms':
                     $verified = SMS_OTP::verify_code($user->ID, $code);
                     break;
+                    
+                case 'whatsapp':
+                    $verified = WhatsApp_OTP::verify_code($user->ID, $code);
+                    break;
             }
             
             // If not verified, try backup code
@@ -147,6 +174,9 @@ class Login_Handler {
             }
             
             if ($verified) {
+                // Record successful attempt and clear failures
+                Security::record_successful_attempt($user->ID);
+                
                 // Delete the pending login
                 delete_transient('otw_2fa_pending_login_' . $token);
                 
@@ -158,23 +188,35 @@ class Login_Handler {
                 wp_safe_redirect($redirect_to);
                 exit;
             } else {
-                $error = __('Invalid verification code. Please try again.', 'otw-2fa');
+                // Record failed attempt
+                Security::record_failed_attempt($user->ID);
+                $remaining_attempts = Security::get_remaining_attempts($user->ID);
+                
+                if ($remaining_attempts <= 0) {
+                    $error = __('Too many failed attempts. You have been temporarily blocked.', 'otw-2fa');
+                } else {
+                    $error = sprintf(
+                        __('Invalid verification code. %d attempt(s) remaining.', 'otw-2fa'),
+                        $remaining_attempts
+                    );
+                }
             }
         }
         
         // Show 2FA verification form
-        $this->render_verification_form($user, $method, $token, $error);
+        $this->render_verification_form($user, $method, $token, $error, $remaining_attempts);
         exit;
     }
     
     /**
      * Render 2FA verification form
      */
-    private function render_verification_form($user, $method, $token, $error = '') {
+    private function render_verification_form($user, $method, $token, $error = '', $remaining_attempts = null) {
         $method_labels = [
             'totp' => __('Enter the code from your authenticator app', 'otw-2fa'),
             'email' => sprintf(__('Enter the code sent to %s', 'otw-2fa'), Email_OTP::mask_email($user->user_email)),
             'sms' => sprintf(__('Enter the code sent to %s', 'otw-2fa'), SMS_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_phone', true))),
+            'whatsapp' => sprintf(__('Enter the code sent to your WhatsApp (%s)', 'otw-2fa'), WhatsApp_OTP::mask_phone(get_user_meta($user->ID, 'otw_2fa_whatsapp', true))),
         ];
         
         login_header(__('Two-Factor Authentication', 'otw-2fa'));

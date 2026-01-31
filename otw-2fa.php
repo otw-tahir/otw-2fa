@@ -54,9 +54,11 @@ class Plugin {
      * Load required files
      */
     private function load_dependencies() {
+        require_once OTW_2FA_PLUGIN_DIR . 'includes/class-security.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-totp.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-email-otp.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-sms-otp.php';
+        require_once OTW_2FA_PLUGIN_DIR . 'includes/class-whatsapp-otp.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-user-settings.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-login-handler.php';
         require_once OTW_2FA_PLUGIN_DIR . 'includes/class-admin.php';
@@ -85,17 +87,34 @@ class Plugin {
      * Activation hook
      */
     public static function activate() {
-        // Default options
+        // Default options - Methods
         add_option('otw_2fa_enable_totp', 1);
         add_option('otw_2fa_enable_email', 1);
         add_option('otw_2fa_enable_sms', 0);
+        add_option('otw_2fa_enable_whatsapp', 0);
+        
+        // SMS Settings
         add_option('otw_2fa_sms_provider', 'twilio');
         add_option('otw_2fa_twilio_sid', '');
         add_option('otw_2fa_twilio_token', '');
         add_option('otw_2fa_twilio_phone', '');
+        
+        // WhatsApp Settings
+        add_option('otw_2fa_whatsapp_provider', 'webhook');
+        add_option('otw_2fa_whatsapp_api_url', 'https://graph.facebook.com/v18.0');
+        add_option('otw_2fa_whatsapp_api_token', '');
+        add_option('otw_2fa_whatsapp_phone_id', '');
+        add_option('otw_2fa_whatsapp_webhook_url', '');
+        
+        // General Settings
         add_option('otw_2fa_code_expiry', 300); // 5 minutes
         add_option('otw_2fa_code_length', 6);
         add_option('otw_2fa_required_roles', ['administrator']);
+        
+        // Security Settings
+        add_option('otw_2fa_max_attempts', 5);
+        add_option('otw_2fa_lockout_duration', 5); // 5 minutes
+        add_option('otw_2fa_enable_logging', 1);
     }
     
     /**

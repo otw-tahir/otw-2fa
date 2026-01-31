@@ -50,6 +50,14 @@
             verifyCode('sms', $('#otw-2fa-sms-code').val());
         });
 
+        // WhatsApp: Send test
+        $('#otw-2fa-send-test-whatsapp').on('click', sendTestWhatsApp);
+
+        // WhatsApp: Verify
+        $('#otw-2fa-verify-whatsapp').on('click', function() {
+            verifyCode('whatsapp', $('#otw-2fa-whatsapp-code').val());
+        });
+
         // Disable 2FA
         $('.otw-2fa-disable-btn').on('click', disable2FA);
 
@@ -57,7 +65,7 @@
         $('#otw-2fa-generate-backup-codes').on('click', generateBackupCodes);
 
         // Enter key handling
-        $('#otw-2fa-verify-code, #otw-2fa-email-code, #otw-2fa-sms-code').on('keypress', function(e) {
+        $('#otw-2fa-verify-code, #otw-2fa-email-code, #otw-2fa-sms-code, #otw-2fa-whatsapp-code').on('keypress', function(e) {
             if (e.which === 13) {
                 e.preventDefault();
                 $(this).siblings('button').click();
@@ -166,6 +174,46 @@
                     $('.otw-2fa-sms-verify').show();
                     $('#otw-2fa-sms-code').focus();
                     showMessage($btn, otw2fa.strings.smsSent, 'success');
+                } else {
+                    showMessage($btn, response.data.message, 'error');
+                }
+            },
+            error: function() {
+                showMessage($btn, otw2fa.strings.error, 'error');
+            },
+            complete: function() {
+                $btn.text('Send Test Code').prop('disabled', false);
+            }
+        });
+    }
+
+    /**
+     * Send test WhatsApp
+     */
+    function sendTestWhatsApp() {
+        var $btn = $('#otw-2fa-send-test-whatsapp');
+        var whatsapp = $('#otw-2fa-whatsapp').val();
+
+        if (!whatsapp) {
+            showMessage($btn, 'Please enter a WhatsApp number', 'error');
+            return;
+        }
+
+        $btn.text(otw2fa.strings.sending).prop('disabled', true);
+
+        $.ajax({
+            url: otw2fa.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'otw_2fa_send_test_whatsapp',
+                nonce: otw2fa.nonce,
+                whatsapp: whatsapp
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('.otw-2fa-whatsapp-verify').show();
+                    $('#otw-2fa-whatsapp-code').focus();
+                    showMessage($btn, otw2fa.strings.whatsappSent, 'success');
                 } else {
                     showMessage($btn, response.data.message, 'error');
                 }

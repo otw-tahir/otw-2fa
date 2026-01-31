@@ -42,9 +42,14 @@ class Admin {
         register_setting('otw_2fa_settings', 'otw_2fa_enable_totp');
         register_setting('otw_2fa_settings', 'otw_2fa_enable_email');
         register_setting('otw_2fa_settings', 'otw_2fa_enable_sms');
+        register_setting('otw_2fa_settings', 'otw_2fa_enable_whatsapp');
         register_setting('otw_2fa_settings', 'otw_2fa_required_roles');
         register_setting('otw_2fa_settings', 'otw_2fa_code_expiry');
         register_setting('otw_2fa_settings', 'otw_2fa_code_length');
+        
+        // Security Settings
+        register_setting('otw_2fa_settings', 'otw_2fa_max_attempts');
+        register_setting('otw_2fa_settings', 'otw_2fa_lockout_duration');
         
         // SMS Provider Settings
         register_setting('otw_2fa_settings', 'otw_2fa_sms_provider');
@@ -52,6 +57,13 @@ class Admin {
         register_setting('otw_2fa_settings', 'otw_2fa_twilio_token');
         register_setting('otw_2fa_settings', 'otw_2fa_twilio_phone');
         register_setting('otw_2fa_settings', 'otw_2fa_webhook_url');
+        
+        // WhatsApp Provider Settings
+        register_setting('otw_2fa_settings', 'otw_2fa_whatsapp_provider');
+        register_setting('otw_2fa_settings', 'otw_2fa_whatsapp_api_url');
+        register_setting('otw_2fa_settings', 'otw_2fa_whatsapp_api_token');
+        register_setting('otw_2fa_settings', 'otw_2fa_whatsapp_phone_id');
+        register_setting('otw_2fa_settings', 'otw_2fa_whatsapp_webhook_url');
         
         // General Section
         add_settings_section(
@@ -94,6 +106,18 @@ class Admin {
             [
                 'id' => 'otw_2fa_enable_sms',
                 'description' => __('Allow users to receive verification codes via SMS.', 'otw-2fa'),
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_enable_whatsapp',
+            __('WhatsApp Verification', 'otw-2fa'),
+            [$this, 'render_checkbox_field'],
+            'otw-2fa-settings',
+            'otw_2fa_general',
+            [
+                'id' => 'otw_2fa_enable_whatsapp',
+                'description' => __('Allow users to receive verification codes via WhatsApp.', 'otw-2fa'),
             ]
         );
         
@@ -212,6 +236,120 @@ class Admin {
                 'description' => __('POST request will be sent with: phone, message, code, site, site_url', 'otw-2fa'),
             ]
         );
+        
+        // WhatsApp Section
+        add_settings_section(
+            'otw_2fa_whatsapp',
+            __('WhatsApp Settings', 'otw-2fa'),
+            [$this, 'render_whatsapp_section'],
+            'otw-2fa-settings'
+        );
+        
+        add_settings_field(
+            'otw_2fa_whatsapp_provider',
+            __('WhatsApp Provider', 'otw-2fa'),
+            [$this, 'render_select_field'],
+            'otw-2fa-settings',
+            'otw_2fa_whatsapp',
+            [
+                'id' => 'otw_2fa_whatsapp_provider',
+                'options' => [
+                    'whatsapp_api' => __('WhatsApp Business API', 'otw-2fa'),
+                    'twilio' => 'Twilio',
+                    'webhook' => __('Custom Webhook', 'otw-2fa'),
+                ],
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_whatsapp_api_url',
+            __('WhatsApp API URL', 'otw-2fa'),
+            [$this, 'render_text_field'],
+            'otw-2fa-settings',
+            'otw_2fa_whatsapp',
+            [
+                'id' => 'otw_2fa_whatsapp_api_url',
+                'class' => 'whatsapp-api-field',
+                'placeholder' => 'https://graph.facebook.com/v18.0',
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_whatsapp_api_token',
+            __('WhatsApp API Token', 'otw-2fa'),
+            [$this, 'render_password_field'],
+            'otw-2fa-settings',
+            'otw_2fa_whatsapp',
+            [
+                'id' => 'otw_2fa_whatsapp_api_token',
+                'class' => 'whatsapp-api-field',
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_whatsapp_phone_id',
+            __('WhatsApp Phone Number ID', 'otw-2fa'),
+            [$this, 'render_text_field'],
+            'otw-2fa-settings',
+            'otw_2fa_whatsapp',
+            [
+                'id' => 'otw_2fa_whatsapp_phone_id',
+                'class' => 'whatsapp-api-field',
+                'description' => __('The Phone Number ID from your WhatsApp Business Account.', 'otw-2fa'),
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_whatsapp_webhook_url',
+            __('WhatsApp Webhook URL', 'otw-2fa'),
+            [$this, 'render_text_field'],
+            'otw-2fa-settings',
+            'otw_2fa_whatsapp',
+            [
+                'id' => 'otw_2fa_whatsapp_webhook_url',
+                'class' => 'whatsapp-webhook-field',
+                'placeholder' => 'https://your-whatsapp-service.com/send',
+                'description' => __('POST request will be sent with: phone, message, code, site, site_url', 'otw-2fa'),
+            ]
+        );
+        
+        // Security Section
+        add_settings_section(
+            'otw_2fa_security',
+            __('Security Settings', 'otw-2fa'),
+            [$this, 'render_security_section'],
+            'otw-2fa-settings'
+        );
+        
+        add_settings_field(
+            'otw_2fa_max_attempts',
+            __('Max Failed Attempts', 'otw-2fa'),
+            [$this, 'render_number_field'],
+            'otw-2fa-settings',
+            'otw_2fa_security',
+            [
+                'id' => 'otw_2fa_max_attempts',
+                'default' => 5,
+                'min' => 1,
+                'max' => 20,
+                'description' => __('Number of failed attempts before user is blocked.', 'otw-2fa'),
+            ]
+        );
+        
+        add_settings_field(
+            'otw_2fa_lockout_duration',
+            __('Lockout Duration (minutes)', 'otw-2fa'),
+            [$this, 'render_number_field'],
+            'otw-2fa-settings',
+            'otw_2fa_security',
+            [
+                'id' => 'otw_2fa_lockout_duration',
+                'default' => 5,
+                'min' => 1,
+                'max' => 60,
+                'description' => __('How long to block user after too many failed attempts.', 'otw-2fa'),
+            ]
+        );
     }
     
     /**
@@ -244,8 +382,17 @@ class Admin {
                 $('.webhook-field').closest('tr').toggle(provider === 'webhook');
             }
             
+            function toggleWhatsAppProviderFields() {
+                var provider = $('#otw_2fa_whatsapp_provider').val();
+                $('.whatsapp-api-field').closest('tr').toggle(provider === 'whatsapp_api');
+                $('.whatsapp-webhook-field').closest('tr').toggle(provider === 'webhook');
+                // Twilio uses SMS Twilio settings
+            }
+            
             $('#otw_2fa_sms_provider').on('change', toggleProviderFields);
+            $('#otw_2fa_whatsapp_provider').on('change', toggleWhatsAppProviderFields);
             toggleProviderFields();
+            toggleWhatsAppProviderFields();
         });
         </script>
         <?php
@@ -263,6 +410,20 @@ class Admin {
      */
     public function render_sms_section() {
         echo '<p>' . __('Configure SMS provider settings for SMS-based verification.', 'otw-2fa') . '</p>';
+    }
+    
+    /**
+     * Render WhatsApp section description
+     */
+    public function render_whatsapp_section() {
+        echo '<p>' . __('Configure WhatsApp provider settings for WhatsApp-based verification.', 'otw-2fa') . '</p>';
+    }
+    
+    /**
+     * Render Security section description
+     */
+    public function render_security_section() {
+        echo '<p>' . __('Configure security settings to protect against brute-force attacks.', 'otw-2fa') . '</p>';
     }
     
     /**
